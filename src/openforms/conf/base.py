@@ -195,6 +195,7 @@ INSTALLED_APPS = [
     "openforms.appointments.contrib.demo",
     "openforms.appointments.contrib.jcc",
     "openforms.appointments.contrib.qmatic",
+    "openforms.appointments.contrib.openafspraak",
     "openforms.config",
     "openforms.emails",
     "openforms.formio",
