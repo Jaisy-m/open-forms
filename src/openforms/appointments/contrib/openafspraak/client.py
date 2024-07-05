@@ -11,30 +11,20 @@ from .models import OpenAfspraakConfig
 # API DATA DEFINITIONS
 
 
-class ServiceDict(TypedDict):
-    publicId: str
+class ProductDict(TypedDict):
+    public_id: str
     name: str
-    # could be float too in theory, documentation is not specific (it gives an int example)
-    duration: int
-    additionalCustomerDuration: int
-    custom: str | None
+    description: str
+    appointment_duration: str
+    price: float
 
 
-class FullServiceDict(ServiceDict):
-    active: bool
-    publicEnabled: bool
-    created: int
-    updated: int
-
-
-class ServiceGroupDict(TypedDict):
-    services: list[ServiceDict]
-
-
-class BranchDict(TypedDict):
-    branchPublicId: str
-    branchName: str
-    serviceGroups: list[ServiceGroupDict]
+class LocationDict(TypedDict):
+    public_id: str
+    name: str
+    address: str
+    city: str
+    postal_code: str
 
 
 class BranchDetailDict(TypedDict):
@@ -102,40 +92,61 @@ class Client(APIClient):
 
         return response
 
-    def list_products(self) -> list[FullServiceDict]:
-        pass
+    def list_products(self) -> list[ProductDict]:
+        endpoint = "products"
+        response = self.get(endpoint)
+        response.raise_for_status()
+        return response.json()
 
-    def list_product_locations(
-        self, service_ids: list[str], location_id: str = ""
-    ) -> list[ServiceGroupDict]:
-        pass
+    def list_product_locations(self, product_id: str = "") -> list[LocationDict]:
+        assert product_id, "Unexpectedly received empty product ID"
+
+        endpoint = f"products/{product_id}/locations"
+        response = self.get(endpoint)
+        response.raise_for_status()
+        return response.json()
 
     def list_dates(self, location_id: str, product_id: str) -> list[date]:
         """
-        Get list of available dates for multiple services and customers.
-
-        ``num_customers`` is the total number of customers, which affects the
-        appointment duration in Qmatic (using
-        ``duration + additionalCustomerDuration * numAdditionalCustomers``, where
-        ``numAdditionalCustomers`` is ``numCustomers - 1``.
-        ).
-
-        Note that Qmatic returns a list of datetimes without timezone information.
+        Get list of available dates for a product and location.
         """
-        pass
+        assert location_id, "Unexpectedly received empty location ID"
+        assert product_id, "Unexpectedly received empty product ID"
+
+        endpoint = "dates"
+        response = self.get(
+            endpoint,
+            params={
+                "location_id": location_id,
+                "product_id": product_id,
+            },
+        )
+        response.raise_for_status()
+        return [date.fromisoformat(entry["date"]) for entry in response.json()]
 
     def list_times(
         self, location_id: str, product_id: str, day: date
     ) -> list[datetime]:
         """
         Get list of available times for multiple services and customers.
-
-        ``num_customers`` is the total number of customers, which affects the
-        appointment duration in Qmatic (using
-        ``duration + additionalCustomerDuration * numAdditionalCustomers``, where
-        ``numAdditionalCustomers`` is ``numCustomers - 1``.
-        ).
-
-        Note that Qmatic returns a list of datetimes without timezone information.
         """
-        pass
+        assert location_id, "Unexpectedly received empty location ID"
+        assert product_id, "Unexpectedly received empty product ID"
+
+        endpoint = "timeslots"
+        response = self.get(
+            endpoint,
+            params={
+                "location_id": location_id,
+                "product_id": product_id,
+                "date": day.isoformat(),
+            },
+        )
+        response.raise_for_status()
+
+        date_format = "%Y-%m-%dT%H:%M:%S%z"
+
+        return [
+            datetime.strptime(entry["start_time"], date_format)
+            for entry in response.json()
+        ]

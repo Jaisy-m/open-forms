@@ -21,8 +21,7 @@ class CustomerFields(TextChoices):
     last_name = "lastName", _("Last name")  # string, max length 100
     email = "email", _("Email address")  # string, max length 255
     phone = "phone", _("Phone number")  # string, max length 20
-    street_name = "street name", _("Street name")  # string, max length 100
-    house_number = "houseNumber", _("House number")  # string, max length 255
+    address = "address", _("Address")  # string, max length 100
     city = "city", _("City")  # string, max length 255
     postal_code = "postalCode", _("Postal code")  # string, max length 255
     birthday = "dateOfBirth", _("Birthday")
@@ -69,21 +68,11 @@ FIELD_TO_FORMIO_COMPONENT: dict[str, Component] = {
             "maxLength": 50,
         },
     },
-    CustomerFields.street_name: {
+    CustomerFields.address: {
         "type": "textfield",
-        "key": CustomerFields.street_name.value,
-        "label": CustomerFields.street_name.label,
+        "key": CustomerFields.address.value,
+        "label": CustomerFields.address.label,
         "autocomplete": "address-line1",
-        "validate": {
-            "required": True,
-            "maxLength": 255,
-        },
-    },
-    CustomerFields.house_number: {
-        "type": "textfield",
-        "key": CustomerFields.house_number.value,
-        "label": CustomerFields.house_number.label,
-        "autocomplete": "address-line2",
         "validate": {
             "required": True,
             "maxLength": 255,

@@ -101,19 +101,25 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         location_id: str = "",
     ) -> list[Product]:
         """
-        Retrieve all available products and services to create an appointment for.
+        Retrieve all available products to create an appointment for.
 
-        Qmatic has a couple of possible endpoints for this, most notably one returning
-        a flat list of products (all or filtered by branch) and two others that return
-        product groups. The product groups dictate which products can be booked together.
-
-        We have to use all of these, since the flat list of products contains additional
-        information like whether a product is public and/or active, which is not included
-        in the service groups.
-
-        The service groups per branch requires v2 API client, the rest can be done with
-        the v1 client.
+        OpenAfspraak has a endpoint that returns all available products. The response
+        contains all the information needed.
         """
+
+        client = OpenAfspraakClient()
+
+        with log_api_errors("Could not retrieve products"):
+            products = client.list_products()
+
+        return [
+            Product(
+                entry["public_id"],
+                entry["name"],
+                entry["appointment_duration"],
+            )
+            for entry in products
+        ]
 
     @with_graceful_default(default=[])
     def get_locations(
@@ -127,33 +133,31 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         API. Since this is only used for the initial setup of the plugin, we can safely
         ignore this for now.
         """
-        if products is None or len(products) == 0:
+        assert products, "Location retrieval without products is not supported."
+
+        if len(products) > 1:
             raise GracefulOpenAfspraakException(
-                "Location retrieval without products is not supported."
+                "Multiple products are not supported by the OpenAfspraak API, only "
+                "the first product is used."
             )
 
-        # client = OpenAfspraakClient()
+        client = OpenAfspraakClient()
+        products_id = products[0].identifier
 
-        # products = products or []
-        # product_ids = [product.identifier for product in products]
-        #
-        # endpoint = f"services/{product_ids[0]}/branches" if product_ids else "branches"
-        #
-        # with log_api_errors(
-        #     "Could not retrieve locations for product, using API endpoint '%s'",
-        #     endpoint,
-        # ):
-        #     response = client.get(endpoint)
-        #     response.raise_for_status()
-        #
-        # # NOTE: Filter out locations that do not have a postal code to prevent
-        # # non-physical addresses.
-        #
-        # return [
-        #     Location(entry["publicId"], entry["name"])
-        #     for entry in response.json()["branchList"]
-        #     if entry["addressZip"]
-        # ]
+        with log_api_errors("Could not retrieve locations for product"):
+            locations = client.list_product_locations(products_id)
+
+        return [
+            Location(
+                entry["public_id"],
+                entry["name"],
+                entry["address"],
+                entry["postal_code"],
+                entry["city"],
+            )
+            for entry in locations
+            if entry["address"]
+        ]
 
     @with_graceful_default(default=[])
     def get_dates(
@@ -164,25 +168,32 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         end_at: date | None = None,
     ) -> list[date]:
         """
-        Retrieve all available dates for given ``products`` and ``location``.
-
-        From the documentation:
-
-            numberOfCustomers will be used on all services when calculating the
-            appointment duration. For example, a service with Duration of 10 minutes and
-            additionalCustomerDuration of 5 minutes will result in an appointment
-            duration of 50 when minutes for 4 customers and 2 services.
-
-        The example given shows that it makes little sense to attach number of customers
-        to a particular product/service. E.g. if you have amount=2 for product 1 and
-        amount=3 for product 2, booking the appointment for 3 customers results in time
-        for 3 people for each product (which is more than you need). Using 5 customers (
-        2 + 3) would result in time reserved for 10 people and is incorrect in this
-        situation.
+        Retrieve all available dates for given ``product`` and ``location``.
 
         .. note:: The API does not support getting dates between a start and end
-           date. The `start_at` and `end_at` arguments are ingored.
+           date. The `start_at` and `end_at` arguments are ingored. The dates
+           will always be 30 days from now.
         """
+        assert products, "Can't retrieve dates without having product information"
+
+        if len(products) > 1:
+            raise GracefulOpenAfspraakException(
+                "Multiple products are not supported by the OpenAfspraak API, only "
+                "the first product is used."
+            )
+
+        product = products[0].identifier
+        client = OpenAfspraakClient()
+
+        with log_api_errors(
+            "Could not retrieve dates for product '%s' at location '%s'",
+            product,
+            location,
+        ):
+            return client.list_dates(
+                location_id=location.identifier,
+                product_id=product,
+            )
 
     @with_graceful_default(default=[])
     def get_times(
@@ -191,7 +202,29 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         location: Location,
         day: date,
     ) -> list[datetime]:
-        pass
+        assert products, "Can't retrieve dates without having product information"
+        assert day >= date.today(), "Can't retrieve times for past dates"
+
+        if len(products) > 1:
+            raise GracefulOpenAfspraakException(
+                "Multiple products are not supported by the OpenAfspraak API, only "
+                "the first product is used."
+            )
+
+        product = products[0].identifier
+        client = OpenAfspraakClient()
+
+        with log_api_errors(
+            "Could not retrieve times for products '%s' at location '%s' on %s",
+            product,
+            location,
+            day,
+        ):
+            return client.list_times(
+                location_id=location.identifier,
+                product_id=product,
+                day=day,
+            )
 
     def get_required_customer_fields(
         self,
@@ -218,7 +251,7 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
     def check_config(self):
         client = OpenAfspraakClient()
         try:
-            response = client.get("services")
+            response = client.get("products")
             response.raise_for_status()
         except (OpenAfspraakException, RequestException) as e:
             raise InvalidPluginConfiguration(
@@ -230,7 +263,7 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
             (
                 _("Configuration"),
                 reverse(
-                    "admin:qmatic_qmaticconfig_change",
+                    "admin:openafspraak_openafspraakconfig_change",
                     args=(OpenAfspraakConfig.singleton_instance_id,),
                 ),
             ),
