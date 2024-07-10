@@ -8,8 +8,6 @@ from zgw_consumers.models import Service
 from .exceptions import OpenAfspraakException
 from .models import OpenAfspraakConfig
 
-# API DATA DEFINITIONS
-
 
 class ProductDict(TypedDict):
     public_id: str
@@ -25,29 +23,6 @@ class LocationDict(TypedDict):
     address: str
     city: str
     postal_code: str
-
-
-class BranchDetailDict(TypedDict):
-    name: str
-    publicId: str
-    phone: str
-    email: str
-    branchPrefix: str | None
-
-    addressLine1: str | None
-    addressLine2: str | None
-    addressZip: str | None
-    addressCity: str | None
-    addressState: str | None
-    addressCountry: str | None
-
-    latitude: float | None
-    longitude: float | None
-    timeZone: str
-    fullTimeZone: str
-    custom: str | None
-    created: int
-    updated: int
 
 
 class NoServiceConfigured(RuntimeError):

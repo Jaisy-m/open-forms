@@ -17,14 +17,14 @@ class CustomerFields(TextChoices):
     """
 
     public_id = "public_id", _("Public ID")  # uuid
-    first_name = "firstName", _("First name")  # string, max length 100
-    last_name = "lastName", _("Last name")  # string, max length 100
+    first_name = "first_name", _("First name")  # string, max length 100
+    last_name = "last_name", _("Last name")  # string, max length 100
     email = "email", _("Email address")  # string, max length 255
     phone = "phone", _("Phone number")  # string, max length 20
     address = "address", _("Address")  # string, max length 100
     city = "city", _("City")  # string, max length 255
-    postal_code = "postalCode", _("Postal code")  # string, max length 255
-    birthday = "dateOfBirth", _("Birthday")
+    postal_code = "postal_code", _("Postal code")  # string, max length 255
+    birthday = "date_of_birth", _("Birthday")
 
 
 FIELD_TO_FORMIO_COMPONENT: dict[str, Component] = {

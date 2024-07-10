@@ -1,7 +1,7 @@
 import logging
 import warnings
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Callable, ParamSpec, TypeVar
 
@@ -21,9 +21,10 @@ from ...base import (
     Location,
     Product,
 )
+from ...exceptions import AppointmentCreateFailed
 from ...registry import register
-from .client import OpenAfspraakClient
-from .constants import CustomerFields
+from .client import OpenAfspraakClient, ProductDict
+from .constants import FIELD_TO_FORMIO_COMPONENT, CustomerFields
 from .exceptions import GracefulOpenAfspraakException, OpenAfspraakException
 from .models import OpenAfspraakConfig
 
@@ -79,6 +80,29 @@ def normalize_customer_details(client: _CustomerDetails | Customer) -> _Customer
     return client
 
 
+def parse_product(product: ProductDict) -> Product:
+    """
+    Parse the product data from the API into a Product object.
+    Since the duration is given as 00:00:00, we need to parse it into a timedelta.
+    """
+    try:
+        hours, minutes, seconds = product["appointment_duration"].split(":")
+        duration = timedelta(
+            hours=int(hours), minutes=int(minutes), seconds=int(seconds)
+        )
+    except ValueError:
+        raise OpenAfspraakException(
+            "Invalid time format for duration field: %s"
+            % product["appointment_duration"]
+        )
+
+    return Product(
+        product["public_id"],
+        product["name"],
+        duration=duration,
+    )
+
+
 @register("openafspraak")
 class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
     """
@@ -112,14 +136,12 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         with log_api_errors("Could not retrieve products"):
             products = client.list_products()
 
-        return [
-            Product(
-                entry["public_id"],
-                entry["name"],
-                entry["appointment_duration"],
-            )
-            for entry in products
-        ]
+        appointment_products = []  # type: list[Product]
+
+        for product in products:
+            appointment_products.append(parse_product(product))
+
+        return appointment_products
 
     @with_graceful_default(default=[])
     def get_locations(
@@ -133,9 +155,9 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         API. Since this is only used for the initial setup of the plugin, we can safely
         ignore this for now.
         """
-        assert products, "Location retrieval without products is not supported."
+        # assert products, "Location retrieval without products is not supported."
 
-        if len(products) > 1:
+        if products is None or len(products) > 1:
             raise GracefulOpenAfspraakException(
                 "Multiple products are not supported by the OpenAfspraak API, only "
                 "the first product is used."
@@ -230,7 +252,14 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         self,
         products: list[Product],
     ) -> list[Component]:
-        pass
+        # TODO:: Actually get the required fields for a specific product from the API.
+        config = OpenAfspraakConfig.get_solo()
+        assert isinstance(config, OpenAfspraakConfig)
+        components = [
+            FIELD_TO_FORMIO_COMPONENT[field]
+            for field in config.required_customer_fields
+        ]
+        return components
 
     def create_appointment(
         self,
@@ -240,12 +269,80 @@ class OpenAfspraakAppointment(BasePlugin[CustomerFields]):
         client: _CustomerDetails | Customer,
         remarks: str = "",
     ) -> str:
-        pass
+        assert (
+            products
+        ), "Can't create an appointment without having product information"
+        customer = normalize_customer_details(client)
+
+        if len(products) > 1:
+            raise GracefulOpenAfspraakException(
+                "Multiple products are not supported by the OpenAfspraak API, only "
+                "the first product is used."
+            )
+
+        # Since the duration is not stored, we need to duration time of the product to
+        # calculate the end time we need to get the product from the API.
+        # This is a bit of a hack, but it's the only way to get the duration.
+        api_client = OpenAfspraakClient()
+        product_identifier = products[0].identifier
+
+        with log_api_errors(
+            "Could not create appointment for product '%s' at location '%s' starting at %s",
+            product_identifier,
+            location,
+            start_at,
+        ):
+            endpoint = f"products/{product_identifier}"
+            response = api_client.get(endpoint)
+            response.raise_for_status()
+            product = parse_product(response.json())
+
+        # Now that we got the duration of the product we can can culate the end time and continue
+        # with creating the appointment.
+        end_time = start_at + product.duration
+
+        body = {
+            "product_id": product.identifier,
+            "location_id": location.identifier,
+            "start_time": start_at.isoformat(),
+            "end_time": end_time.isoformat(),
+            "customers": [
+                {choice: value for choice, value in customer.details.items() if value}
+            ],
+        }
+
+        endpoint = "bookings"
+
+        try:
+            response = api_client.post(endpoint, json=body)
+            print(response.json())
+            response.raise_for_status()
+            return response.json()["public_id"]
+        except (OpenAfspraakException, RequestException, KeyError) as exc:
+            logger.error(
+                "Could not create appointment for product '%s' at location '%s' starting at %s",
+                product,
+                location,
+                start_at,
+                exc_info=exc,
+                extra={
+                    "product_id": product,
+                    "location": location.identifier,
+                    "start_time": start_at,
+                },
+            )
+            raise AppointmentCreateFailed("Could not create appointment") from exc
+        except Exception as exc:
+            raise AppointmentCreateFailed(
+                "Unexpected appointment create failure"
+            ) from exc
 
     def delete_appointment(self, identifier: str) -> None:
+        print("delete_appointment")
         pass
 
     def get_appointment_details(self, identifier: str) -> AppointmentDetails:
+        print("get_appointment_details")
         pass
 
     def check_config(self):
