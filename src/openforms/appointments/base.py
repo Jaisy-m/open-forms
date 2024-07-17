@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Callable, Generic, TypeAlias, TypeVar
 
 from django.db.models import TextChoices
@@ -32,6 +32,7 @@ class Product:
     name: str
     code: str = ""
     amount: int = 1
+    duration: timedelta = timedelta()
 
     def __str__(self):
         return f"{self.identifier} x {self.amount}"

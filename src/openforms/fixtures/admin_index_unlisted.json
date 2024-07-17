@@ -28,5 +28,6 @@
     "suwinet.SuwinetConfig",
     "upgrades.VersionInfo",
     "zgw_apis.ZGWApiGroupConfig",
-    "zgw_apis.ZgwConfig"
+    "zgw_apis.ZgwConfig",
+    "openafspraak.OpenAfspraakConfig"
 ]
