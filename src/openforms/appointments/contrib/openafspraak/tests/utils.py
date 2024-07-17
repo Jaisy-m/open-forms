@@ -26,7 +26,9 @@ class MockConfigMixin:
     def setUpTestData(cls):
         super().setUpTestData()  # type: ignore
 
-        cls.service = ServiceFactory.create(auth_type=AuthTypes.no_auth, api_root=OPENAFSPRAAK_BASE_URL)
+        cls.service = ServiceFactory.create(
+            auth_type=AuthTypes.no_auth, api_root=OPENAFSPRAAK_BASE_URL
+        )
 
     def setUp(self):
         super().setUp()  # type: ignore
