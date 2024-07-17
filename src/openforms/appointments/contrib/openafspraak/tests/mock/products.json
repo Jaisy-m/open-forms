@@ -1,0 +1,16 @@
+[
+    {
+        "public_id": "0f77ae1e-fb83-4667-b402-c1b00e0fd20a",
+        "name": "Rijbewijs aanvragen",
+        "description": "Rijbewijs aanvragen",
+        "appointment_duration": "00:10:00",
+        "price": "0.00"
+    },
+    {
+        "public_id": "6efa3611-3245-4f2c-b346-c46732a57ee5",
+        "name": "ID kaart aanvragen",
+        "description": "ID kaart aanvragen",
+        "appointment_duration": "00:15:00",
+        "price": "0.00"
+    }
+]
